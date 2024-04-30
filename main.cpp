@@ -90,7 +90,32 @@ void Deer() {
     nextNumDeer = 0;
 }
 
-void Grain() { return; }
+void Grain() {
+  while (NowYear < 2030) {
+    // Compute temporary next value for grain height
+    float tempFactor = exp(-SQR((NowTemp - MIDTEMP) / 10.0));
+    float precipFactor = exp(-SQR((NowPrecip - MIDPRECIP) / 10.0));
+
+    float nextHeight = NowHeight;
+    nextHeight += tempFactor * precipFactor * GRAIN_GROWS_PER_MONTH;
+    nextHeight -= (float)NowNumDeer * ONE_DEER_EATS_PER_MONTH;
+
+    if (nextHeight < 0.0)
+      nextHeight = 0.0;
+
+    // Done computing
+    WaitBarrier();
+
+    // Assign the computed next value to the actual variable
+    NowHeight = nextHeight;
+
+    // Done assigning
+    WaitBarrier();
+
+    // Wait for the Watcher to print and update month/year
+    WaitBarrier();
+  }
+}
 
 void Watcher() {
   return;
@@ -102,21 +127,24 @@ void Watcher() {
   printf("%d\t%.2f\t%.2f\t%.2f\t%d\t%d\t%.2f\n", NowMonth + 1, NowTemp,
          NowPrecip, NowHeight, NowNumDeer, NowNumWolves, NowNumPest);
 
+
+#pragma omp barrier*/
+
   //  update month and year
   NowMonth++;
   NowYear = 2019 + NowMonth / 12;
 
-  //  update temp and precipitation
-  unsigned int seed = omp_get_thread_num() * 42;
-  float ang = (30. * (float)NowMonth + 15.) * (M_PI / 180.);
-  float temp = AVG_TEMP - AMP_TEMP * cos(ang);
-  NowTemp = temp + Ranf(-RANDOM_TEMP, RANDOM_TEMP, &seed);
-  float precip = AVG_PRECIP_PER_MONTH + AMP_PRECIP_PER_MONTH * sin(ang);
-  NowPrecip = precip + Ranf(-RANDOM_PRECIP, RANDOM_PRECIP, &seed);
+  //  update precipitation
+  float ang = (30. * (float)NowMonth + 15.) *
+              (M_PI / 180.); // angle of earth around the sun
 
+  float temp = AVG_TEMP - AMP_TEMP * cos(ang);
+  NowTemp = temp + Ranf(-RANDOM_TEMP, RANDOM_TEMP);
+
+  float precip = AVG_PRECIP_PER_MONTH + AMP_PRECIP_PER_MONTH * sin(ang);
+  NowPrecip = precip + Ranf(-RANDOM_PRECIP, RANDOM_PRECIP);
   if (NowPrecip < 0.)
     NowPrecip = 0.;
-#pragma omp barrier*/
 }
 
 void MyAgent() { return; }
