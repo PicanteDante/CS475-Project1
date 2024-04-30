@@ -5,11 +5,6 @@
 #include <stdlib.h>
 #include <time.h>
 
-// setting the number of threads:
-#ifndef NUMT
-#define NUMT 2
-#endif
-
 // settings:
 int NowYear = 2024; // 2024- 2029
 int NowMonth = 0;   // 0 - 11
@@ -35,12 +30,19 @@ const float MIDPRECIP = 10.0;
 
 unsigned int seed = 0;
 
+omp_lock_t Lock;
+volatile int NumInThreadTeam;
+volatile int NumAtBarrier;
+volatile int NumGone;
+
 float Ranf(float low, float high) {
   float r = (float)rand();       // 0 - RAND_MAX
   float t = r / (float)RAND_MAX; // 0. - 1.
 
   return low + t * (high - low);
 }
+
+float SQR(float x) { return x * x; }
 
 void InitBarrier(int n) {
   NumInThreadTeam = n;
@@ -121,7 +123,7 @@ void MyAgent() { return; }
 
 int main(int argc, char *argv[]) {
   // seed = time(NULL);
-  omp_set_num_threads(NUMT);
+  omp_set_num_threads(4);
 
 #pragma omp parallel sections
   {
@@ -141,6 +143,7 @@ int main(int argc, char *argv[]) {
   } // implied barrier -- all functions must return in order
     // to allow any of them to get past here
 
+  /*
 #ifdef CSV
   fprintf(stderr, "%2d , %8d , %6.2f , %6.2lf\n", NUMT, NUMTRIALS,
           100. * probability, maxPerformance);
@@ -150,4 +153,5 @@ int main(int argc, char *argv[]) {
           "%6.2lf\n",
           NUMT, NUMTRIALS, 100. * probability, maxPerformance);
 #endif
+  */
 }
