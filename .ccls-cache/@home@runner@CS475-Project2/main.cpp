@@ -78,16 +78,33 @@ void WaitBarrier() {
 }
 
 void Deer() {
+  while (NowYear < 2030) {
+    // Compute temporary next value for deer population
+    int nextNumDeer = NowNumDeer;
+    int carryingCapacity = (int)(NowHeight);
 
-  int nextNumDeer = NowNumDeer;
-  int carryingCapacity = (int)(NowHeight);
-  if (nextNumDeer < carryingCapacity)
-    nextNumDeer++;
-  else if (nextNumDeer > carryingCapacity)
-    nextNumDeer--;
+    if (nextNumDeer < carryingCapacity) {
+      nextNumDeer++;
+    } else if (nextNumDeer > carryingCapacity) {
+      nextNumDeer--;
+    }
 
-  if (nextNumDeer < 0)
-    nextNumDeer = 0;
+    if (nextNumDeer < 0) {
+      nextNumDeer = 0;
+    }
+
+    // Done computing
+    WaitBarrier();
+
+    // Assign the computed next value to the actual variable
+    NowNumDeer = nextNumDeer;
+
+    // Done assigning
+    WaitBarrier();
+
+    // Wait for the Watcher to print and update month/year
+    WaitBarrier();
+  }
 }
 
 void Grain() {
@@ -118,33 +135,38 @@ void Grain() {
 }
 
 void Watcher() {
-  return;
-  /*
-#pragma omp barrier
+  while (NowYear < 2030) {
+    // Wait for Deer and Grain to finish computing
+    WaitBarrier();
 
-#pragma omp barrier
-  //    printf("Month %d, Year %d\n", NowMonth % 12 + 1, NowYear);
-  printf("%d\t%.2f\t%.2f\t%.2f\t%d\t%d\t%.2f\n", NowMonth + 1, NowTemp,
-         NowPrecip, NowHeight, NowNumDeer, NowNumWolves, NowNumPest);
+    // Print current state
+    printf("%d-%d\t%.2f°F\t%.2f in.\t%.2f in.\t%d deer\n", NowMonth % 12 + 1,
+           NowYear, NowTemp, NowPrecip, NowHeight, NowNumDeer);
 
+    // Done printing
+    WaitBarrier();
 
-#pragma omp barrier*/
+    // Update month and year
+    NowMonth++;
+    if (NowMonth > 11) {
+      NowMonth = 0;
+      NowYear++;
+    }
 
-  //  update month and year
-  NowMonth++;
-  NowYear = 2019 + NowMonth / 12;
+    // Calculate new weather conditions
+    float ang = (30. * (float)NowMonth + 15.) *
+                (M_PI / 180.); // angle of earth around the sun
 
-  //  update precipitation
-  float ang = (30. * (float)NowMonth + 15.) *
-              (M_PI / 180.); // angle of earth around the sun
+    float temp = AVG_TEMP - AMP_TEMP * cos(ang);
+    NowTemp = temp + Ranf(-RANDOM_TEMP, RANDOM_TEMP);
+    float precip = AVG_PRECIP_PER_MONTH + AMP_PRECIP_PER_MONTH * sin(ang);
+    NowPrecip = precip + Ranf(-RANDOM_PRECIP, RANDOM_PRECIP);
+    if (NowPrecip < 0.)
+      NowPrecip = 0.;
 
-  float temp = AVG_TEMP - AMP_TEMP * cos(ang);
-  NowTemp = temp + Ranf(-RANDOM_TEMP, RANDOM_TEMP);
-
-  float precip = AVG_PRECIP_PER_MONTH + AMP_PRECIP_PER_MONTH * sin(ang);
-  NowPrecip = precip + Ranf(-RANDOM_PRECIP, RANDOM_PRECIP);
-  if (NowPrecip < 0.)
-    NowPrecip = 0.;
+    // Done updating
+    WaitBarrier();
+  }
 }
 
 void MyAgent() { return; }
@@ -170,16 +192,4 @@ int main(int argc, char *argv[]) {
     }
   } // implied barrier -- all functions must return in order
     // to allow any of them to get past here
-
-  /*
-#ifdef CSV
-  fprintf(stderr, "%2d , %8d , %6.2f , %6.2lf\n", NUMT, NUMTRIALS,
-          100. * probability, maxPerformance);
-#else
-  fprintf(stderr,
-          "%2d threads : %8d trials ; probability = %6.2f ; megatrials/sec = "
-          "%6.2lf\n",
-          NUMT, NUMTRIALS, 100. * probability, maxPerformance);
-#endif
-  */
 }
