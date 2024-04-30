@@ -169,7 +169,11 @@ void Watcher() {
   }
 }
 
-void MyAgent() { return; }
+void MyAgent() {
+  while (NowYear < 2030) {
+    printf("bruh\n");
+  }
+}
 
 int main(int argc, char *argv[]) {
   // seed = time(NULL);
