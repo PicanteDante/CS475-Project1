@@ -143,8 +143,8 @@ void Watcher() {
     WaitBarrier();
 
     // Print current state
-    printf("%d-%d\t%.2f°F\t%.2f in.\t%.2f in.\t%d deer\n", NowMonth % 12 + 1,
-           NowYear, NowTemp, NowPrecip, NowHeight, NowNumDeer);
+    printf("%d,%.2f,%.2f,%.2f,%d\n", NowMonth, (NowTemp - 32) * (5. / 9.),
+           NowPrecip * 2.54, NowHeight * 2.54, NowNumDeer);
 
     // Update month and year
     NowMonth++;
@@ -181,6 +181,8 @@ int main(int argc, char *argv[]) {
   // seed = time(NULL);
   omp_set_num_threads(4); // Total number of threads including MyAgent
   InitBarrier(4);         // Initialize the barrier for 4 threads
+
+  printf("Month,Temp,Precip,Height,Deer\n");
 #pragma omp parallel sections
   {
 #pragma omp section
