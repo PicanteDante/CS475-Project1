@@ -93,11 +93,9 @@ void Deer() {
       nextNumDeer = 0;
     }
 
-    printf("DEER COMPUTE");
-
     // Done computing
     WaitBarrier();
-    printf("DEER WRITE");
+
     // Assign the computed next value to the actual variable
     NowNumDeer = nextNumDeer;
 
@@ -173,9 +171,7 @@ void Watcher() {
 
 void MyAgent() {
   while (NowYear < 2030) {
-    printf("bruh\n");
     WaitBarrier();
-    printf("bruh2\n");
     WaitBarrier();
     WaitBarrier();
   }
