@@ -93,9 +93,11 @@ void Deer() {
       nextNumDeer = 0;
     }
 
+    printf("DEER COMPUTE");
+
     // Done computing
     WaitBarrier();
-
+    printf("DEER WRITE");
     // Assign the computed next value to the actual variable
     NowNumDeer = nextNumDeer;
 
@@ -136,15 +138,15 @@ void Grain() {
 
 void Watcher() {
   while (NowYear < 2030) {
-    // Wait for Deer and Grain to finish computing
+    // Wait for Deer, Grain, and MyAgent to finish computing
+    WaitBarrier();
+
+    // Wait for Deer, Grain, and MyAgent to finish assigning
     WaitBarrier();
 
     // Print current state
     printf("%d-%d\t%.2f°F\t%.2f in.\t%.2f in.\t%d deer\n", NowMonth % 12 + 1,
            NowYear, NowTemp, NowPrecip, NowHeight, NowNumDeer);
-
-    // Done printing
-    WaitBarrier();
 
     // Update month and year
     NowMonth++;
@@ -172,6 +174,10 @@ void Watcher() {
 void MyAgent() {
   while (NowYear < 2030) {
     printf("bruh\n");
+    WaitBarrier();
+    printf("bruh2\n");
+    WaitBarrier();
+    WaitBarrier();
   }
 }
 
