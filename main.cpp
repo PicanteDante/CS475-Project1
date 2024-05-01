@@ -183,8 +183,8 @@ void MyAgent() {
 
 int main(int argc, char *argv[]) {
   // seed = time(NULL);
-  omp_set_num_threads(4);
-
+  omp_set_num_threads(4); // Total number of threads including MyAgent
+  InitBarrier(4);         // Initialize the barrier for 4 threads
 #pragma omp parallel sections
   {
 #pragma omp section
