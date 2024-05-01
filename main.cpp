@@ -8,22 +8,24 @@
 // settings:
 int NowYear = 2024; // 2024- 2029
 int NowMonth = 0;   // 0 - 11
+int NowMonthReal = 0;
 
-float NowPrecip;       // inches of rain per month
-float NowTemp;         // temperature this month
-float NowHeight = 5.0; // grain height in inches
-int NowNumDeer = 2;    // number of deer in the current population
+float NowPrecip;        // inches of rain per month
+float NowTemp = 52.0;   // temperature this month
+float NowHeight = 50.0; // grain height in inches
+int NowNumDeer = 4;     // number of deer in the current population
+int NowAbductions = 0;
 
-const float GRAIN_GROWS_PER_MONTH = 12.0;
-const float ONE_DEER_EATS_PER_MONTH = 1.0;
+const float GRAIN_GROWS_PER_MONTH = 50.0;
+const float ONE_DEER_EATS_PER_MONTH = 1;
 
-const float AVG_PRECIP_PER_MONTH = 7.0; // average
-const float AMP_PRECIP_PER_MONTH = 6.0; // plus or minus
-const float RANDOM_PRECIP = 2.0;        // plus or minus noise
+const float AVG_PRECIP_PER_MONTH = 10.0; // average
+const float AMP_PRECIP_PER_MONTH = 9.0;  // plus or minus
+const float RANDOM_PRECIP = 4.0;         // plus or minus noise
 
 const float AVG_TEMP = 60.0;    // average
 const float AMP_TEMP = 20.0;    // plus or minus
-const float RANDOM_TEMP = 10.0; // plus or minus noise
+const float RANDOM_TEMP = 15.0; // plus or minus noise
 
 const float MIDTEMP = 40.0;
 const float MIDPRECIP = 10.0;
@@ -84,9 +86,9 @@ void Deer() {
     int carryingCapacity = (int)(NowHeight);
 
     if (nextNumDeer < carryingCapacity) {
-      nextNumDeer++;
+      nextNumDeer *= Ranf(1.1, 2.0);
     } else if (nextNumDeer > carryingCapacity) {
-      nextNumDeer--;
+      nextNumDeer *= 0.75;
     }
 
     if (nextNumDeer < 0) {
@@ -142,12 +144,17 @@ void Watcher() {
     // Wait for Deer, Grain, and MyAgent to finish assigning
     WaitBarrier();
 
+    // Update Abductions
+    NowNumDeer -= NowAbductions;
+
     // Print current state
-    printf("%d,%.2f,%.2f,%.2f,%d\n", NowMonth, (NowTemp - 32) * (5. / 9.),
-           NowPrecip * 2.54, NowHeight * 2.54, NowNumDeer);
+    printf("%d,%.2f,%.2f,%.2f,%d,%d\n", NowMonthReal,
+           (NowTemp - 32) * (5. / 9.), NowPrecip * 2.54, NowHeight * 2.54,
+           NowNumDeer, NowAbductions);
 
     // Update month and year
     NowMonth++;
+    NowMonthReal++;
     if (NowMonth > 11) {
       NowMonth = 0;
       NowYear++;
@@ -169,11 +176,41 @@ void Watcher() {
   }
 }
 
-void MyAgent() {
+void MyAgent() { // Alien lifeform
   while (NowYear < 2030) {
-    WaitBarrier();
-    WaitBarrier();
-    WaitBarrier();
+    // Base abduction rate is 20% of the deer population with a maximum of 30%
+    float baseAbductions = (0.2 * NowNumDeer) * Ranf(0.75, 1.5);
+
+    float heightEffect =
+        1.0 -
+        Ranf(0.0, (NowHeight /
+                   100.0)); // 50% abduction rate modulated by grain height
+    // printf("base abudctions: %.2f\n", baseAbductions);
+    //  Reducing abduction rate based on precipitation
+    float rainEffect =
+        1.0 - (NowPrecip /
+               75.0); // Reduce effectiveness by up to ~10% based on
+                      // precipitation (assuming max typical rain is 10 inches)
+    // if (rainEffect < 0.5)
+    //   rainEffect = 0.5; // Ensuring at least 50% effectiveness
+
+    // printf("rain effect: %.2f\n", rainEffect);
+
+    // printf("abductions: %.2f\n", rainEffect * baseAbductions);
+    int abductions = (int)(baseAbductions * rainEffect);
+
+    if (abductions > NowNumDeer - 2)
+      abductions = NowNumDeer - 2; // Ensure at least one deer remains
+
+    // if (abductions < 0)
+    //   abductions = 0; // Don't abduct a negative number of deer
+
+    WaitBarrier(); // Done computing
+
+    // NowNumDeer -= abductions; // Update global deer count after abductions
+    NowAbductions = abductions;
+    WaitBarrier(); // Done assigning
+    WaitBarrier(); // Done printing
   }
 }
 
@@ -182,7 +219,7 @@ int main(int argc, char *argv[]) {
   omp_set_num_threads(4); // Total number of threads including MyAgent
   InitBarrier(4);         // Initialize the barrier for 4 threads
 
-  printf("Month,Temp,Precip,Height,Deer\n");
+  printf("Month,Temp,Precip,Height,Deer,Abductions\n");
 #pragma omp parallel sections
   {
 #pragma omp section
