@@ -1,240 +1,158 @@
 #include <stdio.h>
-//#define _USE_MATH_DEFINES
+#define _USE_MATH_DEFINES
 #include <math.h>
 #include <omp.h>
 #include <stdlib.h>
+#include <string>
 #include <time.h>
 
-// settings:
-int NowYear = 2024; // 2024- 2029
-int NowMonth = 0;   // 0 - 11
-int NowMonthReal = 0;
+// setting the number of threads:
+#ifndef NUMT
+#define NUMT 2
+#endif
 
-float NowPrecip;        // inches of rain per month
-float NowTemp = 52.0;   // temperature this month
-float NowHeight = 50.0; // grain height in inches
-int NowNumDeer = 4;     // number of deer in the current population
-int NowAbductions = 0;
+// setting the number of capitals we want to try:
+#ifndef NUMCAPITALS
+#define NUMCAPITALS 5
+#endif
 
-const float GRAIN_GROWS_PER_MONTH = 50.0;
-const float ONE_DEER_EATS_PER_MONTH = 1;
+// maximum iterations to allow looking for convergence:
+#define MAXITERATIONS 100
 
-const float AVG_PRECIP_PER_MONTH = 10.0; // average
-const float AMP_PRECIP_PER_MONTH = 9.0;  // plus or minus
-const float RANDOM_PRECIP = 4.0;         // plus or minus noise
+// how many tries to discover the maximum performance:
+#define NUMTIMES 20
 
-const float AVG_TEMP = 60.0;    // average
-const float AMP_TEMP = 20.0;    // plus or minus
-const float RANDOM_TEMP = 15.0; // plus or minus noise
+#define CSV
 
-const float MIDTEMP = 40.0;
-const float MIDPRECIP = 10.0;
+struct city {
+  std::string name;
+  float longitude;
+  float latitude;
+  int capitalnumber;
+  float mindistance;
+};
 
-unsigned int seed = 0;
+#include "UsCities.data"
 
-omp_lock_t Lock;
-volatile int NumInThreadTeam;
-volatile int NumAtBarrier;
-volatile int NumGone;
+// setting the number of cities we want to try:
+#define NUMCITIES (sizeof(Cities) / sizeof(struct city))
 
-float Ranf(float low, float high) {
-  float r = (float)rand();       // 0 - RAND_MAX
-  float t = r / (float)RAND_MAX; // 0. - 1.
+struct capital {
+  std::string name;
+  float longitude;
+  float latitude;
+  float longsum;
+  float latsum;
+  int numsum;
+};
 
-  return low + t * (high - low);
-}
+struct capital Capitals[NUMCAPITALS];
 
-float SQR(float x) { return x * x; }
-
-void InitBarrier(int n) {
-  NumInThreadTeam = n;
-  NumAtBarrier = 0;
-  omp_init_lock(&Lock);
-}
-
-// have the calling thread wait here until all the other threads catch up:
-
-void WaitBarrier() {
-  omp_set_lock(&Lock);
-  {
-    NumAtBarrier++;
-    if (NumAtBarrier == NumInThreadTeam) {
-      NumGone = 0;
-      NumAtBarrier = 0;
-      // let all other threads get back to what they were doing
-      // before this one unlocks, knowing that they might immediately
-      // call WaitBarrier( ) again:
-      while (NumGone != NumInThreadTeam - 1)
-        ;
-      omp_unset_lock(&Lock);
-      return;
-    }
-  }
-  omp_unset_lock(&Lock);
-
-  while (NumAtBarrier != 0)
-    ; // this waits for the nth thread to arrive
-
-#pragma omp atomic
-  NumGone++; // this flags how many threads have returned
-}
-
-void Deer() {
-  while (NowYear < 2030) {
-    // Compute temporary next value for deer population
-    int nextNumDeer = NowNumDeer;
-    int carryingCapacity = (int)(NowHeight);
-
-    if (nextNumDeer < carryingCapacity) {
-      nextNumDeer *= Ranf(1.1, 2.0);
-    } else if (nextNumDeer > carryingCapacity) {
-      nextNumDeer *= 0.75;
-    }
-
-    if (nextNumDeer < 0) {
-      nextNumDeer = 0;
-    }
-
-    // Done computing
-    WaitBarrier();
-
-    // Assign the computed next value to the actual variable
-    NowNumDeer = nextNumDeer;
-
-    // Done assigning
-    WaitBarrier();
-
-    // Wait for the Watcher to print and update month/year
-    WaitBarrier();
-  }
-}
-
-void Grain() {
-  while (NowYear < 2030) {
-    // Compute temporary next value for grain height
-    float tempFactor = exp(-SQR((NowTemp - MIDTEMP) / 10.0));
-    float precipFactor = exp(-SQR((NowPrecip - MIDPRECIP) / 10.0));
-
-    float nextHeight = NowHeight;
-    nextHeight += tempFactor * precipFactor * GRAIN_GROWS_PER_MONTH;
-    nextHeight -= (float)NowNumDeer * ONE_DEER_EATS_PER_MONTH;
-
-    if (nextHeight < 0.0)
-      nextHeight = 0.0;
-
-    // Done computing
-    WaitBarrier();
-
-    // Assign the computed next value to the actual variable
-    NowHeight = nextHeight;
-
-    // Done assigning
-    WaitBarrier();
-
-    // Wait for the Watcher to print and update month/year
-    WaitBarrier();
-  }
-}
-
-void Watcher() {
-  while (NowYear < 2030) {
-    // Wait for Deer, Grain, and MyAgent to finish computing
-    WaitBarrier();
-
-    // Wait for Deer, Grain, and MyAgent to finish assigning
-    WaitBarrier();
-
-    // Update Abductions
-    NowNumDeer -= NowAbductions;
-
-    // Print current state
-    printf("%d,%.2f,%.2f,%.2f,%d,%d\n", NowMonthReal,
-           (NowTemp - 32) * (5. / 9.), NowPrecip * 2.54, NowHeight * 2.54,
-           NowNumDeer, NowAbductions);
-
-    // Update month and year
-    NowMonth++;
-    NowMonthReal++;
-    if (NowMonth > 11) {
-      NowMonth = 0;
-      NowYear++;
-    }
-
-    // Calculate new weather conditions
-    float ang = (30. * (float)NowMonth + 15.) *
-                (M_PI / 180.); // angle of earth around the sun
-
-    float temp = AVG_TEMP - AMP_TEMP * cos(ang);
-    NowTemp = temp + Ranf(-RANDOM_TEMP, RANDOM_TEMP);
-    float precip = AVG_PRECIP_PER_MONTH + AMP_PRECIP_PER_MONTH * sin(ang);
-    NowPrecip = precip + Ranf(-RANDOM_PRECIP, RANDOM_PRECIP);
-    if (NowPrecip < 0.)
-      NowPrecip = 0.;
-
-    // Done updating
-    WaitBarrier();
-  }
-}
-
-void MyAgent() { // Alien lifeform
-  while (NowYear < 2030) {
-    // Base abduction rate is 20% of the deer population with a maximum of 30%
-    float baseAbductions = (0.2 * NowNumDeer) * Ranf(0.75, 1.5);
-
-    float heightEffect =
-        1.0 -
-        Ranf(0.0, (NowHeight /
-                   100.0)); // 50% abduction rate modulated by grain height
-    // printf("base abudctions: %.2f\n", baseAbductions);
-    //  Reducing abduction rate based on precipitation
-    float rainEffect =
-        1.0 - (NowPrecip /
-               75.0); // Reduce effectiveness by up to ~10% based on
-                      // precipitation (assuming max typical rain is 10 inches)
-    // if (rainEffect < 0.5)
-    //   rainEffect = 0.5; // Ensuring at least 50% effectiveness
-
-    // printf("rain effect: %.2f\n", rainEffect);
-
-    // printf("abductions: %.2f\n", rainEffect * baseAbductions);
-    int abductions = (int)(baseAbductions * rainEffect);
-
-    if (abductions > NowNumDeer - 2)
-      abductions = NowNumDeer - 2; // Ensure at least one deer remains
-
-    // if (abductions < 0)
-    //   abductions = 0; // Don't abduct a negative number of deer
-
-    WaitBarrier(); // Done computing
-
-    // NowNumDeer -= abductions; // Update global deer count after abductions
-    NowAbductions = abductions;
-    WaitBarrier(); // Done assigning
-    WaitBarrier(); // Done printing
-  }
+float Distance(int city, int capital) {
+  float dx = Cities[city].longitude - Capitals[capital].longitude;
+  float dy = Cities[city].latitude - Capitals[capital].latitude;
+  return sqrtf(dx * dx + dy * dy);
 }
 
 int main(int argc, char *argv[]) {
-  // seed = time(NULL);
-  omp_set_num_threads(4); // Total number of threads including MyAgent
-  InitBarrier(4);         // Initialize the barrier for 4 threads
+#ifdef _OPENMP
+  fprintf(stderr, "OpenMP is supported -- version = %d\n", _OPENMP);
+#else
+  fprintf(stderr, "No OpenMP support!\n");
+  return 1;
+#endif
 
-  printf("Month,Temp,Precip,Height,Deer,Abductions\n");
-#pragma omp parallel sections
-  {
-#pragma omp section
-    { Deer(); }
+  // make sure we have the data correctly:
+  // for( int i = 0; i < NUMCITIES; i++ )
+  //{
+  // fprintf( stderr, "%3d  %8.2f  %8.2f  %s\n", i, Cities[i].longitude,
+  // Cities[i].latitude, Cities[i].name.c_str() );
+  //}
 
-#pragma omp section
-    { Grain(); }
+  omp_set_num_threads(
+      NUMT); // set the number of threads to use in parallelizing the for-loop:`
 
-#pragma omp section
-    { Watcher(); }
+  // seed the capitals:
+  // (this is just picking initial capital cities at uniform intervals)
+  for (int k = 0; k < NUMCAPITALS; k++) {
+    int cityIndex = k * (NUMCITIES - 1) / (NUMCAPITALS - 1);
+    Capitals[k].longitude = Cities[cityIndex].longitude;
+    Capitals[k].latitude = Cities[cityIndex].latitude;
+  }
 
-#pragma omp section
-    {
-      MyAgent(); // your own
+  double time0, time1;
+  for (int n = 0; n < MAXITERATIONS; n++) {
+    // reset the summations for the capitals:
+    for (int k = 0; k < NUMCAPITALS; k++) {
+      Capitals[k].longsum = 0.;
+      Capitals[k].latsum = 0.;
+      Capitals[k].numsum = 0;
     }
-  } // implied barrier -- all functions must return in order
-    // to allow any of them to get past here
+
+    time0 = omp_get_wtime();
+
+// the #pragma goes here -- you figure out what it needs to look like:
+#pragma omp parallel for default(none) shared(Cities, Capitals)
+    for (int i = 0; i < NUMCITIES; i++) {
+      int capitalnumber = -1;
+      float mindistance = 1.e+37;
+
+      for (int k = 0; k < NUMCAPITALS; k++) {
+        float dist = Distance(i, k);
+        if (dist < mindistance) {
+          mindistance = dist;
+          capitalnumber = k;
+        }
+        Cities[i].capitalnumber = capitalnumber;
+      }
+
+      int k = Cities[i].capitalnumber;
+// this is here for the same reason as the Trapezoid noteset uses it:
+#pragma omp critical
+      {
+        Capitals[k].longsum += Cities[i].longitude;
+        Capitals[k].latsum += Cities[i].latitude;
+        Capitals[k].numsum++;
+      }
+    }
+    time1 = omp_get_wtime();
+
+    // get the average longitude and latitude for each capital:
+    for (int k = 0; k < NUMCAPITALS; k++) {
+      Capitals[k].longitude = Capitals[k].longsum / Capitals[k].numsum;
+      Capitals[k].latitude = Capitals[k].latsum / Capitals[k].numsum;
+    }
+  }
+
+  double megaCityCapitalsPerSecond =
+      (double)NUMCITIES * (double)NUMCAPITALS / (time1 - time0) / 1000000.;
+
+  // figure out what actual city is closest to each capital:
+  // this is the extra credit:
+  // for (int k = 0; k < NUMCAPITALS; k++) {
+  //  ? ? ? ? ?
+  //}
+
+  // print the longitude-latitude of each new capital city:
+  // you only need to do this once per some number of NUMCAPITALS -- do it for
+  // the 1-thread version:
+  if (NUMT == 1) {
+    for (int k = 0; k < NUMCAPITALS; k++) {
+      fprintf(stderr, "\t%3d:  %8.2f , %8.2f\n", k, Capitals[k].longitude,
+              Capitals[k].latitude);
+
+      // if you did the extra credit, use this fprintf instead:
+      // fprintf( stderr, "\t%3d:  %8.2f , %8.2f , %s\n", k,
+      // Capitals[k].longitude, Capitals[k].latitude, Capitals[k].name.c_str()
+      // );
+    }
+  }
+#ifdef CSV
+  fprintf(stderr, "%2d , %4d , %4d , %8.3lf:\n", NUMT, NUMCITIES, NUMCAPITALS,
+          megaCityCapitalsPerSecond);
+#else
+  fprintf(stderr,
+          "%2d threads : %4d cities ; %4d capitals; megatrials/sec = %8.3lf\n",
+          NUMT, NUMCITIES, NUMCAPITALS, megaCityCapitalsPerSecond);
+#endif
 }

@@ -1,9 +1,9 @@
 #!/bin/bash
 for t in 1 2 4 6 8
 do
-  for n in 1 10 100 1000 10000 100000 500000 1000000
+  for n in 2 3 4 5 10 15 20 30 40 50
   do
-     g++   main.cpp  -DNUMT=$t -DNUMTRIALS=$n  -o proj01  -lm  -fopenmp
-    ./proj01
+     g++   main.cpp  -DNUMT=$t -DNUMCAPITALS=$n  -o proj03  -lm  -fopenmp
+    ./proj03
   done
 done
