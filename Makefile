@@ -15,7 +15,7 @@ main-debug: $(SRCS) $(HEADERS)
 proj01:     	main.cpp
 	g++     main.cpp   -o proj01  -lm  -fopenmp
 
-proj03:		proj03.cpp
+proj03:		main.cpp
 	g++  main.cpp    -o  proj03    -lm  -fopenmp
 
 

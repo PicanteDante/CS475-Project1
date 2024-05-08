@@ -56,7 +56,7 @@ float Distance(int city, int capital) {
 
 int main(int argc, char *argv[]) {
 #ifdef _OPENMP
-  fprintf(stderr, "OpenMP is supported -- version = %d\n", _OPENMP);
+  // fprintf(stderr, "OpenMP is supported -- version = %d\n", _OPENMP);
 #else
   fprintf(stderr, "No OpenMP support!\n");
   return 1;
@@ -148,7 +148,7 @@ int main(int argc, char *argv[]) {
     }
   }
 #ifdef CSV
-  fprintf(stderr, "%2d , %4d , %4d , %8.3lf:\n", NUMT, NUMCITIES, NUMCAPITALS,
+  fprintf(stderr, "%2d , %4ld , %4d , %8.3lf:\n", NUMT, NUMCITIES, NUMCAPITALS,
           megaCityCapitalsPerSecond);
 #else
   fprintf(stderr,
