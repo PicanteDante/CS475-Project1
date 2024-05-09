@@ -18,6 +18,8 @@ proj01:     	main.cpp
 proj03:		main.cpp
 	g++  main.cpp    -o  proj03    -lm  -fopenmp
 
+proj03-2:		main2.cpp
+	g++  main2.cpp    -o  proj03-2    -lm  -fopenmp
 
 clean:
 	rm -f main main-debug
