@@ -1,157 +1,158 @@
-#include <stdio.h>
-#define _USE_MATH_DEFINES
+#include <ctime>
 #include <math.h>
 #include <omp.h>
+#include <stdio.h>
 #include <stdlib.h>
-#include <string>
-#include <time.h>
+#include <string.h>
+#include <sys/resource.h>
+#include <sys/time.h>
 
-// setting the number of threads:
-#ifndef NUMT
-#define NUMT 2
+// SSE stands for Streaming SIMD Extensions
+
+#define SSE_WIDTH 4
+#define ALIGNED __attribute__((aligned(16)))
+
+#define NUMTRIES 100
+
+#ifndef ARRAYSIZE
+#define ARRAYSIZE 1024 * 1024
 #endif
 
-// setting the number of capitals we want to try:
-#ifndef NUMCAPITALS
-#define NUMCAPITALS 5
-#endif
+ALIGNED float A[ARRAYSIZE];
+ALIGNED float B[ARRAYSIZE];
+ALIGNED float C[ARRAYSIZE];
 
-// maximum iterations to allow looking for convergence:
-#define MAXITERATIONS 100
-
-// how many tries to discover the maximum performance:
-#define NUMTIMES 20
-
-#define CSV
-
-struct city {
-  std::string name;
-  float longitude;
-  float latitude;
-  int capitalnumber;
-  float mindistance;
-};
-
-#include "UsCities.data"
-
-// setting the number of cities we want to try:
-#define NUMCITIES (sizeof(Cities) / sizeof(struct city))
-
-struct capital {
-  std::string name;
-  float longitude;
-  float latitude;
-  float longsum;
-  float latsum;
-  int numsum;
-};
-
-struct capital Capitals[NUMCAPITALS];
-
-float Distance(int city, int capital) {
-  float dx = Cities[city].longitude - Capitals[capital].longitude;
-  float dy = Cities[city].latitude - Capitals[capital].latitude;
-  return sqrtf(dx * dx + dy * dy);
-}
+void SimdMul(float *, float *, float *, int);
+void NonSimdMul(float *, float *, float *, int);
+float SimdMulSum(float *, float *, int);
+float NonSimdMulSum(float *, float *, int);
 
 int main(int argc, char *argv[]) {
-#ifdef _OPENMP
-  // fprintf(stderr, "OpenMP is supported -- version = %d\n", _OPENMP);
-#else
-  fprintf(stderr, "No OpenMP support!\n");
-  return 1;
-#endif
-
-  // make sure we have the data correctly:
-  // for( int i = 0; i < NUMCITIES; i++ )
-  //{
-  // fprintf( stderr, "%3d  %8.2f  %8.2f  %s\n", i, Cities[i].longitude,
-  // Cities[i].latitude, Cities[i].name.c_str() );
-  //}
-
-  omp_set_num_threads(
-      NUMT); // set the number of threads to use in parallelizing the for-loop:`
-
-  // seed the capitals:
-  // (this is just picking initial capital cities at uniform intervals)
-  for (int k = 0; k < NUMCAPITALS; k++) {
-    int cityIndex = k * (NUMCITIES - 1) / (NUMCAPITALS - 1);
-    Capitals[k].longitude = Cities[cityIndex].longitude;
-    Capitals[k].latitude = Cities[cityIndex].latitude;
+  for (int i = 0; i < ARRAYSIZE; i++) {
+    A[i] = sqrtf((float)(i + 1));
+    B[i] = sqrtf((float)(i + 1));
   }
 
-  double time0, time1;
-  for (int n = 0; n < MAXITERATIONS; n++) {
-    // reset the summations for the capitals:
-    for (int k = 0; k < NUMCAPITALS; k++) {
-      Capitals[k].longsum = 0.;
-      Capitals[k].latsum = 0.;
-      Capitals[k].numsum = 0;
-    }
+  fprintf(stderr, "%12d\t", ARRAYSIZE);
 
-    time0 = omp_get_wtime();
+  double maxPerformance = 0.;
+  for (int t = 0; t < NUMTRIES; t++) {
+    double time0 = omp_get_wtime();
+    NonSimdMul(A, B, C, ARRAYSIZE);
+    double time1 = omp_get_wtime();
+    double perf = (double)ARRAYSIZE / (time1 - time0);
+    if (perf > maxPerformance)
+      maxPerformance = perf;
+  }
+  double megaMults = maxPerformance / 1000000.;
+  fprintf(stderr, "N %10.2lf\t", megaMults);
+  double mmn = megaMults;
 
-// the #pragma goes here -- you figure out what it needs to look like:
-#pragma omp parallel for default(none) shared(Cities, Capitals)
-    for (int i = 0; i < NUMCITIES; i++) {
-      int capitalnumber = -1;
-      float mindistance = 1.e+37;
+  maxPerformance = 0.;
+  for (int t = 0; t < NUMTRIES; t++) {
+    double time0 = omp_get_wtime();
+    SimdMul(A, B, C, ARRAYSIZE);
+    double time1 = omp_get_wtime();
+    double perf = (double)ARRAYSIZE / (time1 - time0);
+    if (perf > maxPerformance)
+      maxPerformance = perf;
+  }
+  megaMults = maxPerformance / 1000000.;
+  fprintf(stderr, "S %10.2lf\t", megaMults);
+  double mms = megaMults;
+  double speedup = mms / mmn;
+  fprintf(stderr, "(%6.2lf)\t", speedup);
 
-      for (int k = 0; k < NUMCAPITALS; k++) {
-        float dist = Distance(i, k);
-        if (dist < mindistance) {
-          mindistance = dist;
-          capitalnumber = k;
-        }
-      }
-      Cities[i].capitalnumber = capitalnumber;
-      int k = Cities[i].capitalnumber;
-// this is here for the same reason as the Trapezoid noteset uses it:
-#pragma omp critical
-      {
-        Capitals[k].longsum += Cities[i].longitude;
-        Capitals[k].latsum += Cities[i].latitude;
-        Capitals[k].numsum++;
-      }
-    }
-    time1 = omp_get_wtime();
+  maxPerformance = 0.;
+  float sumn, sums;
+  for (int t = 0; t < NUMTRIES; t++) {
+    double time0 = omp_get_wtime();
+    sumn = NonSimdMulSum(A, B, ARRAYSIZE);
+    double time1 = omp_get_wtime();
+    double perf = (double)ARRAYSIZE / (time1 - time0);
+    if (perf > maxPerformance)
+      maxPerformance = perf;
+  }
+  double megaMultAdds = maxPerformance / 1000000.;
+  fprintf(stderr, "N %10.2lf\t", megaMultAdds);
+  mmn = megaMultAdds;
 
-    // get the average longitude and latitude for each capital:
-    for (int k = 0; k < NUMCAPITALS; k++) {
-      Capitals[k].longitude = Capitals[k].longsum / Capitals[k].numsum;
-      Capitals[k].latitude = Capitals[k].latsum / Capitals[k].numsum;
-    }
+  maxPerformance = 0.;
+  for (int t = 0; t < NUMTRIES; t++) {
+    double time0 = omp_get_wtime();
+    sums = SimdMulSum(A, B, ARRAYSIZE);
+    double time1 = omp_get_wtime();
+    double perf = (double)ARRAYSIZE / (time1 - time0);
+    if (perf > maxPerformance)
+      maxPerformance = perf;
+  }
+  megaMultAdds = maxPerformance / 1000000.;
+  fprintf(stderr, "S %10.2lf\t", megaMultAdds);
+  mms = megaMultAdds;
+  speedup = mms / mmn;
+  fprintf(stderr, "(%6.2lf)\n", speedup);
+  // fprintf( stderr, "[ %8.1f , %8.1f , %8.1f ]\n", C[ARRAYSIZE-1], sumn, sums
+  // );
+
+  return 0;
+}
+
+void NonSimdMul(float *A, float *B, float *C, int n) { ? ? ? ? ? }
+
+float NonSimdMulSum(float *A, float *B, int n) { ? ? ? ? ? }
+
+void SimdMul(float *a, float *b, float *c, int len) {
+  int limit = (len / SSE_WIDTH) * SSE_WIDTH;
+  __asm(".att_syntax\n\t"
+        "movq    -24(%rbp), %r8\n\t"  // a
+        "movq    -32(%rbp), %rcx\n\t" // b
+        "movq    -40(%rbp), %rdx\n\t" // c
+  );
+
+  for (int i = 0; i < limit; i += SSE_WIDTH) {
+    __asm(".att_syntax\n\t"
+          "movups	(%r8), %xmm0\n\t"  // load the first sse register
+          "movups	(%rcx), %xmm1\n\t" // load the second sse register
+          "mulps	%xmm1, %xmm0\n\t"  // do the multiply
+          "movups	%xmm0, (%rdx)\n\t" // store the result
+          "addq $16, %r8\n\t"
+          "addq $16, %rcx\n\t"
+          "addq $16, %rdx\n\t");
   }
 
-  double megaCityCapitalsPerSecond =
-      (double)NUMCITIES * (double)NUMCAPITALS / (time1 - time0) / 1000000.;
-
-  // figure out what actual city is closest to each capital:
-  // this is the extra credit:
-  // for (int k = 0; k < NUMCAPITALS; k++) {
-  //  ? ? ? ? ?
-  //}
-
-  // print the longitude-latitude of each new capital city:
-  // you only need to do this once per some number of NUMCAPITALS -- do it for
-  // the 1-thread version:
-  if (NUMT == 1) {
-    for (int k = 0; k < NUMCAPITALS; k++) {
-      // fprintf(stderr, "\t%3d:  %8.2f , %8.2f\n", k, Capitals[k].longitude,
-      // Capitals[k].latitude);
-
-      // if you did the extra credit, use this fprintf instead:
-      // fprintf( stderr, "\t%3d:  %8.2f , %8.2f , %s\n", k,
-      // Capitals[k].longitude, Capitals[k].latitude, Capitals[k].name.c_str()
-      // );
-    }
+  for (int i = limit; i < len; i++) {
+    c[i] = a[i] * b[i];
   }
-#ifdef CSV
-  fprintf(stderr, "%2d , %4ld , %4d , %8.3lf\n", NUMT, NUMCITIES, NUMCAPITALS,
-          megaCityCapitalsPerSecond);
-#else
-  fprintf(stderr,
-          "%2d threads : %4d cities ; %4d capitals; megatrials/sec = %8.3lf\n",
-          NUMT, NUMCITIES, NUMCAPITALS, megaCityCapitalsPerSecond);
-#endif
+}
+
+float SimdMulSum(float *a, float *b, int len) {
+  float sum[4] = {0., 0., 0., 0.};
+  int limit = (len / SSE_WIDTH) * SSE_WIDTH;
+
+  __asm(".att_syntax\n\t"
+        "movq    -40(%rbp), %r8\n\t"  // a
+        "movq    -48(%rbp), %rcx\n\t" // b
+        "leaq    -32(%rbp), %rdx\n\t" // &sum[0]
+        "movups	 (%rdx), %xmm2\n\t"   // 4 copies of 0. in xmm2
+  );
+
+  for (int i = 0; i < limit; i += SSE_WIDTH) {
+    __asm(".att_syntax\n\t"
+          "movups	(%r8), %xmm0\n\t"  // load the first sse register
+          "movups	(%rcx), %xmm1\n\t" // load the second sse register
+          "mulps	%xmm1, %xmm0\n\t"  // do the multiply
+          "addps	%xmm0, %xmm2\n\t"  // do the add
+          "addq $16, %r8\n\t"
+          "addq $16, %rcx\n\t");
+  }
+
+  __asm(".att_syntax\n\t"
+        "movups	 %xmm2, (%rdx)\n\t" // copy the sums back to sum[ ]
+  );
+
+  for (int i = limit; i < len; i++) {
+    sum[0] += a[i] * b[i];
+  }
+
+  return sum[0] + sum[1] + sum[2] + sum[3];
 }
