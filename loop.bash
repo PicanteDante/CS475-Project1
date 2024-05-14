@@ -5,7 +5,7 @@
 
 for n in 1024 2048 4096 16384 65536 262144 1048576 2097152 4194304 8388608
 do
-   echo "Running tests with ARRAYSIZE=$n"
+   #echo "Running tests with ARRAYSIZE=$n"
    # Assuming 'main.cpp' is your source file:
    g++ main2.cpp -DARRAYSIZE=$n -o simd_test -lm -fopenmp
    ./simd_test
